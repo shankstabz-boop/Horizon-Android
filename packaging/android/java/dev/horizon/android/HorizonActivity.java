@@ -158,11 +158,87 @@ public final class HorizonActivity extends android.app.NativeActivity {
         applyHighRefreshRate(this, 0);
     }
 
-    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        @Override public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
             applyHighRefreshRate(this, 0);
+            ensurePointerCapture();
         }
+    }
+
+         private boolean pointerCaptured = false;
+
+    private void ensurePointerCapture() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) {
+            return;
+        }
+        try {
+            android.view.Window window = getWindow();
+            if (window == null) return;
+            final android.view.View target = window.getDecorView();
+            if (target == null) return;
+
+            target.setFocusable(true);
+            target.setFocusableInTouchMode(true);
+            if (!target.hasFocus()) {
+                target.requestFocus();
+            }
+
+            target.setOnCapturedPointerListener(new android.view.View.OnCapturedPointerListener() {
+                @Override
+                public boolean onCapturedPointer(android.view.View view, android.view.MotionEvent event) {
+                    float dx = event.getAxisValue(android.view.MotionEvent.AXIS_RELATIVE_X);
+                    float dy = event.getAxisValue(android.view.MotionEvent.AXIS_RELATIVE_Y);
+                    if (dx == 0f && dy == 0f && event.getActionMasked() == android.view.MotionEvent.ACTION_MOVE) {
+                        dx = event.getX();
+                        dy = event.getY();
+                    }
+                    android.view.MotionEvent forwarded = android.view.MotionEvent.obtain(event);
+                    forwarded.setLocation(dx, dy);
+                    boolean handled = HorizonActivity.super.dispatchGenericMotionEvent(forwarded);
+                    forwarded.recycle();
+                    return handled || true;
+                }
+            });
+
+            if (!target.hasPointerCapture()) {
+                target.requestPointerCapture();
+            }
+            pointerCaptured = target.hasPointerCapture();
+        } catch (Throwable ignored) {}
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        int source = event.getSource();
+        if ((source & android.view.InputDevice.SOURCE_KEYBOARD) == android.view.InputDevice.SOURCE_KEYBOARD) {
+            int keyCode = event.getKeyCode();
+            if (keyCode == android.view.KeyEvent.KEYCODE_ESCAPE) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && getWindow() != null) {
+                    getWindow().getDecorView().releasePointerCapture();
+                    pointerCaptured = false;
+                }
+            } else if (keyCode != android.view.KeyEvent.KEYCODE_VOLUME_UP
+                    && keyCode != android.view.KeyEvent.KEYCODE_VOLUME_DOWN) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O
+                        && getWindow() != null && !getWindow().getDecorView().hasPointerCapture()) {
+                    getWindow().getDecorView().requestPointerCapture();
+                }
+                return super.dispatchKeyEvent(event);
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+        if (event.isFromSource(android.view.InputDevice.SOURCE_MOUSE)
+                && event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+            ensurePointerCapture();
+        }
+        return super.dispatchTouchEvent(event);
+    }
+}
     }
 
     public static void applyHighRefreshRate(final android.app.Activity activity, final int preferredHz) {
