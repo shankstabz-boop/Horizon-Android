@@ -57,33 +57,41 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           python3 - <<'PY'
-          import base64, os
+          import base64, os, subprocess
           from pathlib import Path
-          # A dedicated dev key wins when the repository has one; otherwise the release
-          # key signs dev builds too (the .dev package is a separate app, so the
-          # certificate is the only thing the APK carries -- never the key itself).
           dev = os.environ.get('DEV_KEYSTORE', '')
           release = os.environ.get('RELEASE_KEYSTORE', '')
+          path = Path('.local/android/ci.keystore')
+          path.parent.mkdir(parents=True, exist_ok=True)
           if dev:
               value, password, alias = dev, 'android', 'androiddebugkey'
+              path.write_bytes(base64.b64decode(value, validate=True))
           elif release:
               value = release
               password = os.environ['RELEASE_KEYSTORE_PASSWORD']
               alias = os.environ['RELEASE_KEY_ALIAS']
+              path.write_bytes(base64.b64decode(value, validate=True))
           else:
-              raise SystemExit('Set ANDROID_KEYSTORE_BASE64 (or ANDROID_DEV_KEYSTORE_BASE64); see docs/android-dev-builds.md')
-          path = Path('.local/android/ci.keystore')
-          path.parent.mkdir(parents=True, exist_ok=True)
-          path.write_bytes(base64.b64decode(value, validate=True))
+              password, alias = 'android', 'androiddebugkey'
+              subprocess.run([
+                  'keytool', '-genkeypair', '-v',
+                  '-keystore', str(path),
+                  '-storepass', password,
+                  '-alias', alias,
+                  '-keypass', password,
+                  '-keyalg', 'RSA',
+                  '-keysize', '2048',
+                  '-validity', '10000',
+                  '-dname', 'CN=Android Debug,O=Android,C=US'
+              ], check=True)
           path.chmod(0o600)
-          # Gradle resolves a relative storeFile against packaging/android, so pass an
-          # absolute path and the credentials that belong to this keystore.
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env:
               env.write(f'HORIZON_ANDROID_KEYSTORE={path.resolve()}\n')
               env.write(f'HORIZON_ANDROID_KEYSTORE_PASSWORD={password}\n')
               env.write(f'HORIZON_ANDROID_KEY_ALIAS={alias}\n')
               env.write(f'HORIZON_ANDROID_KEY_PASSWORD={password}\n')
           PY
+
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
