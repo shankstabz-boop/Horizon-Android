@@ -239,7 +239,6 @@ public final class HorizonActivity extends android.app.NativeActivity {
         return super.dispatchTouchEvent(event);
     }
 }
-    }
 
     public static void applyHighRefreshRate(final android.app.Activity activity, final int preferredHz) {
         if (activity == null) return;
