@@ -321,7 +321,6 @@ public final class HorizonActivity extends android.app.NativeActivity {
                 nativeDocumentResult(request, 0, null);
             } catch (Throwable ignored) {}
         }
-    }
 
     public static String copyFolderTree(android.content.Context context, String treeUriString, String destDirPath) {
         sCancelFolderCopy = false;
